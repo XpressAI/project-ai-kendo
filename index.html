@@ -2,26 +2,25 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MediaPipe Pose Landmarker Demo</title>
+    <title>Kendo Swing Analyzer</title>
     <link href="style.css" rel="stylesheet">
     <!-- Include Material Components Web CSS -->
     <link href="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.css" rel="stylesheet">
 </head>
 <body>
-    <h1>Pose Detection using MediaPipe Pose Landmarker</h1>
+    <h1>Kendo Swing Analyzer</h1>
 
-    <section id="demos" class="invisible">
-
-        <h2>Demo: Webcam Continuous Pose Landmarker Detection</h2>
-        <p>Stand in front of your webcam to get real-time pose landmarker detection.<br>Click <b>ENABLE WEBCAM</b> below and grant access to the webcam if prompted.</p>
+    <section id="demos">
+        <h2>Webcam Pose Detection</h2>
+        <p>Stand in front of your webcam to analyze your kendo swings.<br>Click <b>ENABLE WEBCAM</b> below and grant access to the webcam if prompted.</p>
 
         <div id="liveView" class="videoView">
             <button id="webcamButton" class="mdc-button mdc-button--raised">
                 <span class="mdc-button__label">ENABLE WEBCAM</span>
             </button>
             <div style="position: relative;">
-                <video id="webcam" style="width: 1280px; height: 720px;" autoplay playsinline></video>
-                <canvas class="output_canvas" id="output_canvas" width="1280" height="720" style="position: absolute; left: 0px; top: 0px;"></canvas>
+                <video id="webcam" style="width: 640px; height: 480px;" autoplay playsinline></video>
+                <canvas id="output_canvas" width="640" height="480" style="position: absolute; left: 0px; top: 0px;"></canvas>
             </div>
         </div>
     </section>
