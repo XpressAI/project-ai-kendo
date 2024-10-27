@@ -1,0 +1,45 @@
+body {
+    font-family: Roboto, sans-serif;
+    margin: 2em;
+    color: #3d3d3d;
+  }
+  
+  h1 {
+    color: #007f8b;
+  }
+  
+  h2 {
+    clear: both;
+  }
+  
+  video {
+    clear: both;
+    display: block;
+    transform: rotateY(180deg);
+  }
+  
+  section {
+    opacity: 1;
+    transition: opacity 500ms ease-in-out;
+  }
+  
+  .invisible {
+    opacity: 0.2;
+  }
+  
+  .videoView,
+  .detectOnClick {
+    position: relative;
+    float: left;
+    width: 48%;
+    margin: 2% 1%;
+    cursor: pointer;
+  }
+  
+  .output_canvas {
+    transform: rotateY(180deg);
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+  

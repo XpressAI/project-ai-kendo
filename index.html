@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>MediaPipe Pose Landmarker Demo</title>
+    <link href="style.css" rel="stylesheet">
+    <!-- Include Material Components Web CSS -->
+    <link href="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.css" rel="stylesheet">
+</head>
+<body>
+    <h1>Pose Detection using MediaPipe Pose Landmarker</h1>
+
+    <section id="demos" class="invisible">
+
+        <h2>Demo: Webcam Continuous Pose Landmarker Detection</h2>
+        <p>Stand in front of your webcam to get real-time pose landmarker detection.<br>Click <b>ENABLE WEBCAM</b> below and grant access to the webcam if prompted.</p>
+
+        <div id="liveView" class="videoView">
+            <button id="webcamButton" class="mdc-button mdc-button--raised">
+                <span class="mdc-button__label">ENABLE WEBCAM</span>
+            </button>
+            <div style="position: relative;">
+                <video id="webcam" style="width: 1280px; height: 720px;" autoplay playsinline></video>
+                <canvas class="output_canvas" id="output_canvas" width="1280" height="720" style="position: absolute; left: 0px; top: 0px;"></canvas>
+            </div>
+        </div>
+    </section>
+
+    <!-- Include Material Components Web JavaScript -->
+    <script src="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.js"></script>
+    <!-- Include the app.js script as a module -->
+    <script type="module" src="app.js"></script>
+</body>
+</html>
