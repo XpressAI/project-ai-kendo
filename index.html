@@ -18,10 +18,15 @@
             <button id="webcamButton" class="mdc-button mdc-button--raised">
                 <span class="mdc-button__label">ENABLE WEBCAM</span>
             </button>
+            <button id="startAnalysisButton" class="mdc-button mdc-button--raised" disabled>
+                <span class="mdc-button__label">START ANALYSIS</span>
+            </button>
             <div style="position: relative;">
                 <video id="webcam" style="width: 640px; height: 480px;" autoplay playsinline></video>
                 <canvas id="output_canvas" width="640" height="480" style="position: absolute; left: 0px; top: 0px;"></canvas>
             </div>
+            <!-- Message Display -->
+            <div id="message"></div>
         </div>
     </section>
 
