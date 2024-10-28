@@ -1,16 +1,5 @@
-// app.js
-import { FilesetResolver, PoseLandmarker, DrawingUtils } from "https://cdn.skypack.dev/@mediapipe/tasks-vision@0.10.0";
-
-const landmarksIndices = {
-    LEFT_WRIST: 15,
-    RIGHT_WRIST: 16,
-    LEFT_INDEX: 19,
-    RIGHT_INDEX: 20,
-    LEFT_PINKY: 17,
-    RIGHT_PINKY: 18,
-    LEFT_THUMB: 21,
-    RIGHT_THUMB: 22,
-};
+import { FilesetResolver, PoseLandmarker, DrawingUtils } from "https://cdn.skypack.dev/@mediapipe/tasks-vision@latest";
+import { drawShinai } from './drawShinai.js';
 
 let poseLandmarker = undefined;
 let runningMode = "VIDEO";
@@ -28,18 +17,15 @@ const STAGE_WEBCAM_ON = 1;
 const STAGE_READY_CHECK = 2;
 const STAGE_READY = 3;
 const STAGE_SWING = 4;
+const STAGE_SHOW_RESULTS = 5;
 
 let currentStage = STAGE_IDLE;
 
-const WRIST_STABILITY_THRESHOLD = 0.02;
-const SWING_START_THRESHOLD = 0.05;
+const WRIST_STABILITY_THRESHOLD = 0.8;
+const SWING_START_THRESHOLD = 0.08;
 
 let stableStartTime = null;
 let initialWristPositions = null;
-let lastFrameTime = 0;
-const targetFPS = 15;
-const smoothFactor = 0.8;
-let previousLandmarks = null;
 
 function updateMessage(text, color = 'black') {
     messageDiv.style.color = color;
@@ -47,9 +33,8 @@ function updateMessage(text, color = 'black') {
 }
 
 async function createPoseLandmarker() {
-    console.log('Creating pose landmarker...');
     const vision = await FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
     );
     poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
         baseOptions: {
@@ -59,7 +44,6 @@ async function createPoseLandmarker() {
         runningMode: runningMode,
         numPoses: 1
     });
-    console.log('Pose landmarker created.');
 }
 createPoseLandmarker();
 
@@ -76,103 +60,8 @@ if (hasGetUserMedia()) {
     console.warn("getUserMedia() is not supported by your browser");
 }
 
-function drawShinai(landmarks) {
-    // Check if all required landmarks are present
-    const requiredIndices = [
-        landmarksIndices.LEFT_THUMB,
-        landmarksIndices.LEFT_INDEX,
-        landmarksIndices.LEFT_PINKY,
-        landmarksIndices.RIGHT_THUMB,
-        landmarksIndices.RIGHT_INDEX,
-        landmarksIndices.RIGHT_PINKY
-    ];
-
-    const allLandmarksPresent = requiredIndices.every(index => 
-        landmarks[index] && 
-        landmarks[index].x !== undefined && 
-        landmarks[index].y !== undefined
-    );
-
-    if (!allLandmarksPresent) {
-        return;
-    }
-
-    // Get all the landmarks for both hands
-    const leftHandPoints = {
-        thumb: {
-            x: landmarks[landmarksIndices.LEFT_THUMB].x * canvasElement.width,
-            y: landmarks[landmarksIndices.LEFT_THUMB].y * canvasElement.height
-        },
-        index: {
-            x: landmarks[landmarksIndices.LEFT_INDEX].x * canvasElement.width,
-            y: landmarks[landmarksIndices.LEFT_INDEX].y * canvasElement.height
-        },
-        pinky: {
-            x: landmarks[landmarksIndices.LEFT_PINKY].x * canvasElement.width,
-            y: landmarks[landmarksIndices.LEFT_PINKY].y * canvasElement.height
-        }
-    };
-
-    const rightHandPoints = {
-        thumb: {
-            x: landmarks[landmarksIndices.RIGHT_THUMB].x * canvasElement.width,
-            y: landmarks[landmarksIndices.RIGHT_THUMB].y * canvasElement.height
-        },
-        index: {
-            x: landmarks[landmarksIndices.RIGHT_INDEX].x * canvasElement.width,
-            y: landmarks[landmarksIndices.RIGHT_INDEX].y * canvasElement.height
-        },
-        pinky: {
-            x: landmarks[landmarksIndices.RIGHT_PINKY].x * canvasElement.width,
-            y: landmarks[landmarksIndices.RIGHT_PINKY].y * canvasElement.height
-        }
-    };
-
-    // Draw left hand grip
-    canvasCtx.beginPath();
-    canvasCtx.moveTo(leftHandPoints.thumb.x, leftHandPoints.thumb.y);
-    canvasCtx.lineTo(leftHandPoints.index.x, leftHandPoints.index.y);
-    canvasCtx.lineTo(leftHandPoints.pinky.x, leftHandPoints.pinky.y);
-    canvasCtx.lineTo(leftHandPoints.thumb.x, leftHandPoints.thumb.y);
-    canvasCtx.strokeStyle = 'red';
-    canvasCtx.lineWidth = 2;
-    canvasCtx.stroke();
-
-    // Draw right hand grip
-    canvasCtx.beginPath();
-    canvasCtx.moveTo(rightHandPoints.thumb.x, rightHandPoints.thumb.y);
-    canvasCtx.lineTo(rightHandPoints.index.x, rightHandPoints.index.y);
-    canvasCtx.lineTo(rightHandPoints.pinky.x, rightHandPoints.pinky.y);
-    canvasCtx.lineTo(rightHandPoints.thumb.x, rightHandPoints.thumb.y);
-    canvasCtx.strokeStyle = 'blue';
-    canvasCtx.lineWidth = 2;
-    canvasCtx.stroke();
-
-    // Draw connecting line between hands (shinai)
-    canvasCtx.beginPath();
-    // Calculate center points of each hand triangle
-    const leftHandCenter = {
-        x: (leftHandPoints.thumb.x + leftHandPoints.index.x + leftHandPoints.pinky.x) / 3,
-        y: (leftHandPoints.thumb.y + leftHandPoints.index.y + leftHandPoints.pinky.y) / 3
-    };
-    const rightHandCenter = {
-        x: (rightHandPoints.thumb.x + rightHandPoints.index.x + rightHandPoints.pinky.x) / 3,
-        y: (rightHandPoints.thumb.y + rightHandPoints.index.y + rightHandPoints.pinky.y) / 3
-    };
-    
-    // Draw the shinai line between the centers
-    canvasCtx.moveTo(leftHandCenter.x, leftHandCenter.y);
-    canvasCtx.lineTo(rightHandCenter.x, rightHandCenter.y);
-    canvasCtx.strokeStyle = 'purple';
-    canvasCtx.lineWidth = 4;
-    canvasCtx.stroke();
-
-    return { leftHandCenter, rightHandCenter };
-}
-
 async function enableCam() {
-  console.log('Enabling/disabling webcam...');
-  if (!poseLandmarker) {
+    if (!poseLandmarker) {
         console.log("Wait! poseLandmarker not loaded yet.");
         return;
     }
@@ -180,7 +69,6 @@ async function enableCam() {
     if (webcamRunning) {
         webcamRunning = false;
         enableWebcamButton.innerText = "ENABLE WEBCAM";
-        console.log('Webcam disabled.');
         if (video.srcObject) {
             video.srcObject.getTracks().forEach(track => track.stop());
         }
@@ -195,20 +83,18 @@ async function enableCam() {
 
         const constraints = { video: true };
         navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
-            console.log('Stream received.');
             video.srcObject = stream;
-            video.addEventListener("loadeddata", () => {
-                console.log('Video data loaded.');
-                predictWebcam();
-            });
-        }).catch(function(err) {
-            console.error('Error accessing the webcam: ' + err);
+            video.addEventListener("loadeddata", predictWebcam);
         });
+        
+        // Always enable the start analysis button
+        startAnalysisButton.disabled = false;
+        updateMessage("Webcam enabled. Click 'Start Analysis' when ready", "blue");
     }
 }
 
 function startAnalysis() {
-    if (currentStage === STAGE_WEBCAM_ON) {
+    if (currentStage === STAGE_WEBCAM_ON || currentStage === STAGE_SHOW_RESULTS) {
         currentStage = STAGE_READY_CHECK;
         stableStartTime = null;
         initialWristPositions = null;
@@ -217,18 +103,8 @@ function startAnalysis() {
     }
 }
 
-function smoothLandmarks(newLandmarks, previousLandmarks) {
-    if (!previousLandmarks) return newLandmarks;
-
-    return newLandmarks.map((newLandmark, i) => ({
-        x: smoothFactor * previousLandmarks[i].x + (1 - smoothFactor) * newLandmark.x,
-        y: smoothFactor * previousLandmarks[i].y + (1 - smoothFactor) * newLandmark.y,
-        z: smoothFactor * previousLandmarks[i].z + (1 - smoothFactor) * newLandmark.z
-    }));
-}
-
 function calculateSwingAngle(landmarks) {
-    const handCenters = drawShinai(landmarks);
+    const handCenters = drawShinai(landmarks, canvasElement, canvasCtx);
     if (!handCenters) return;
 
     const { leftHandCenter, rightHandCenter } = handCenters;
@@ -250,11 +126,13 @@ function calculateSwingAngle(landmarks) {
     const angleDegrees = (angleRadians * 180) / Math.PI;
 
     const cutType = angleDegrees > 45 ? 'Big Cut' : 'Small Cut';
-    updateMessage(`Swing Angle: ${angleDegrees.toFixed(2)}°<br>Cut Type: ${cutType}`, "blue");
-
-    currentStage = STAGE_WEBCAM_ON;
+    
+    currentStage = STAGE_SHOW_RESULTS;
+    updateMessage(`Swing Angle: ${angleDegrees.toFixed(2)}°<br>Cut Type: ${cutType}<br><br>Click 'Start Analysis' to try again`, "blue");
     startAnalysisButton.disabled = false;
     startAnalysisButton.innerText = "START ANALYSIS";
+    
+    return angleDegrees;
 }
 
 function distanceBetweenPoints(a, b) {
@@ -266,79 +144,90 @@ function distanceBetweenPoints(a, b) {
 async function predictWebcam() {
     if (!webcamRunning) return;
 
-    const now = performance.now();
-    const elapsed = now - lastFrameTime;
+    const results = await poseLandmarker.detectForVideo(video, performance.now());
 
-    if (elapsed > 1000 / targetFPS) {
-        lastFrameTime = now;
+    canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+    canvasCtx.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
 
-        const results = await poseLandmarker.detectForVideo(video, now);
+    if (results.landmarks && results.landmarks[0]) {
+        const landmarks = results.landmarks[0];
+        const drawingUtils = new DrawingUtils(canvasCtx);
+        drawingUtils.drawLandmarks(landmarks, { radius: 5 });
+        drawingUtils.drawConnectors(landmarks, PoseLandmarker.POSE_CONNECTIONS);
 
-        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-        canvasCtx.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
+        const handCenters = drawShinai(landmarks, canvasElement, canvasCtx);
 
-        if (results.landmarks && results.landmarks[0]) {
-            const landmarks = smoothLandmarks(results.landmarks[0], previousLandmarks);
-            previousLandmarks = landmarks;
+        if (handCenters) {
+            const { leftHandCenter, rightHandCenter } = handCenters;
 
-            const drawingUtils = new DrawingUtils(canvasCtx);
-            drawingUtils.drawLandmarks(landmarks, { radius: 5 });
-            drawingUtils.drawConnectors(landmarks, PoseLandmarker.POSE_CONNECTIONS);
+            switch (currentStage) {
+                case STAGE_WEBCAM_ON:
+                    const leftWrist = landmarks[15];  // Left wrist landmark
+                    const rightWrist = landmarks[16]; // Right wrist landmark
 
-            const handCenters = drawShinai(landmarks);
-            if (handCenters) {
-                const { leftHandCenter, rightHandCenter } = handCenters;
-
-                switch (currentStage) {
-                    case STAGE_WEBCAM_ON:
-                        startAnalysisButton.disabled = false;
-                        updateMessage("Hands detected", "green");
-                        break;
-
-                    case STAGE_READY_CHECK:
-                        if (!initialWristPositions) {
-                            initialWristPositions = { left: leftHandCenter, right: rightHandCenter };
-                            stableStartTime = now;
+                    // Display message for hands but don't disable the button
+                    if (leftWrist && rightWrist) {
+                        if (leftWrist.visibility > 0.7 && rightWrist.visibility > 0.7) {
+                            updateMessage("Hands detected", "green");
                         } else {
-                            const leftMovement = distanceBetweenPoints(leftHandCenter, initialWristPositions.left);
-                            const rightMovement = distanceBetweenPoints(rightHandCenter, initialWristPositions.right);
-
-                            if (leftMovement < WRIST_STABILITY_THRESHOLD && rightMovement < WRIST_STABILITY_THRESHOLD) {
-                                const elapsedTime = now - stableStartTime;
-                                updateMessage(`Hold still... ${(2 - (elapsedTime / 1000)).toFixed(1)}s`, "blue");
-                                if (elapsedTime >= 2000) {
-                                    currentStage = STAGE_READY;
-                                    initialWristPositions = { left: leftHandCenter, right: rightHandCenter };
-                                    stableStartTime = null;
-                                    updateMessage("Ready!", "green");
-                                }
-                            } else {
-                                stableStartTime = now;
-                                initialWristPositions = { left: leftHandCenter, right: rightHandCenter };
-                                updateMessage("Please hold still", "red");
-                            }
+                            updateMessage(`Show both hands clearly for better accuracy`, "red");
                         }
-                        break;
+                    } else {
+                        updateMessage("Ensure both hands are visible", "red");
+                    }
+                    break;
 
-                    case STAGE_READY:
-                        updateMessage("Ready!", "green");
+                case STAGE_READY_CHECK:
+                    if (!initialWristPositions) {
+                        initialWristPositions = { left: leftHandCenter, right: rightHandCenter };
+                        stableStartTime = performance.now();
+                        updateMessage("Please hold still", "blue");
+                    } else {
                         const leftMovement = distanceBetweenPoints(leftHandCenter, initialWristPositions.left);
                         const rightMovement = distanceBetweenPoints(rightHandCenter, initialWristPositions.right);
 
-                        if (leftMovement >= SWING_START_THRESHOLD || rightMovement >= SWING_START_THRESHOLD) {
-                            currentStage = STAGE_SWING;
-                            calculateSwingAngle(landmarks);
+                        if (leftMovement < WRIST_STABILITY_THRESHOLD && rightMovement < WRIST_STABILITY_THRESHOLD) {
+                            const elapsedTime = performance.now() - stableStartTime;
+                            updateMessage(`Hold still... ${Math.max(0, (2 - (elapsedTime / 1000))).toFixed(1)}s`, "blue");
+                            
+                            if (elapsedTime >= 2000) {
+                                currentStage = STAGE_READY;
+                                initialWristPositions = { left: leftHandCenter, right: rightHandCenter };
+                                stableStartTime = null;
+                                updateMessage("Ready! Make your swing!", "green");
+                            }
+                        } else {
+                            stableStartTime = performance.now();
+                            initialWristPositions = { left: leftHandCenter, right: rightHandCenter };
+                            updateMessage("Too much movement, please hold still", "red");
                         }
-                        break;
-                }
-            } else {
-                startAnalysisButton.disabled = true;
-                updateMessage("Hands not detected", "red");
+                    }
+                    break;
+
+                case STAGE_READY:
+                    updateMessage("Ready! Make your swing!", "green");
+                    const leftMovement = distanceBetweenPoints(leftHandCenter, initialWristPositions.left);
+                    const rightMovement = distanceBetweenPoints(rightHandCenter, initialWristPositions.right);
+
+                    if (leftMovement >= SWING_START_THRESHOLD || rightMovement >= SWING_START_THRESHOLD) {
+                        currentStage = STAGE_SWING;
+                        const angle = calculateSwingAngle(landmarks);
+                        if (!angle || angle < 10) {
+                            currentStage = STAGE_READY_CHECK;
+                            updateMessage("Swing not detected. Please try again.", "red");
+                            startAnalysisButton.disabled = false;
+                            startAnalysisButton.innerText = "START ANALYSIS";
+                        }
+                    }
+                    break;
             }
         } else {
             startAnalysisButton.disabled = true;
-            updateMessage("No pose detected", "red");
+            updateMessage("Hands not detected", "red");
         }
+    } else {
+        startAnalysisButton.disabled = true;
+        updateMessage("No pose detected", "red");
     }
 
     requestAnimationFrame(predictWebcam);
