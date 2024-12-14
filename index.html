@@ -2,33 +2,43 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kendo Swing Analyzer</title>
     <link href="style.css" rel="stylesheet">
     <!-- Include Material Components Web CSS -->
     <link href="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.css" rel="stylesheet">
 </head>
 <body>
-    <h1>Kendo Swing Analyzer</h1>
+    <header>
+        <h1>Kendo Swing Analyzer</h1>
+    </header>
 
-    <section id="demos">
-        <h2>Webcam Pose Detection</h2>
-        <p>Stand in front of your webcam to analyze your kendo swings.<br>Click <b>ENABLE WEBCAM</b> below and grant access to the webcam if prompted.</p>
-
-        <div id="liveView" class="videoView">
-            <button id="webcamButton" class="mdc-button mdc-button--raised">
-                <span class="mdc-button__label">ENABLE WEBCAM</span>
-            </button>
-            <button id="startAnalysisButton" class="mdc-button mdc-button--raised" disabled>
-                <span class="mdc-button__label">START ANALYSIS</span>
-            </button>
-            <div style="position: relative;">
-                <video id="webcam" style="width: 640px; height: 480px;" autoplay playsinline></video>
-                <canvas id="output_canvas" width="640" height="480" style="position: absolute; left: 0px; top: 0px;"></canvas>
+    <main class="container">
+        <section id="controls">
+            <h2>Controls</h2>
+            <div class="button-group">
+                <button id="webcamButton" class="mdc-button mdc-button--raised">
+                    <span class="mdc-button__label">ENABLE WEBCAM</span>
+                </button>
+                <button id="startAnalysisButton" class="mdc-button mdc-button--raised" disabled>
+                    <span class="mdc-button__label">START ANALYSIS</span>
+                </button>
+                <input type="file" id="videoUpload" accept="video/*" style="display: none;">
+                <label for="videoUpload" class="mdc-button mdc-button--raised">
+                    <span class="mdc-button__label">UPLOAD VIDEO</span>
+                </label>
             </div>
-            <!-- Message Display -->
-            <div id="message"></div>
-        </div>
-    </section>
+        </section>
+
+        <section id="liveView">
+            <canvas id="output_canvas" width="640" height="480"></canvas>
+            <video id="webcam" autoplay playsinline></video>
+        </section>
+
+        <section id="messageBox">
+            <div id="message">Welcome! Follow the instructions above to start.</div>
+        </section>
+    </main>
 
     <!-- Include Material Components Web JavaScript -->
     <script src="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.js"></script>

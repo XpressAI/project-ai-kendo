@@ -2,42 +2,62 @@ body {
     font-family: Roboto, sans-serif;
     margin: 2em;
     color: #3d3d3d;
-  }
-  
-  h1 {
+}
+
+h1 {
     color: #007f8b;
-  }
-  
-  h2 {
+    text-align: center;
+}
+
+h2 {
     clear: both;
-  }
-  
-  .videoView {
+    margin-top: 20px;
+    text-align: center;
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+
+.button-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+}
+
+#liveView {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
     position: relative;
-    margin: 2% 0;
-  }
-  
-  #output_canvas {
+}
+
+#output_canvas {
     transform: rotateY(180deg);
-    position: absolute;
-    left: 0;
-    top: 0;
-  }
-  
-  video {
-    transform: rotateY(180deg);
-  }
-  
-  button {
-    margin-bottom: 10px;
-  }
-  
-  #message {
+    border: 1px solid #ccc;
+    background-color: #f9f9f9;
+}
+
+video {
+    display: none; /* Hide the video element */
+}
+
+#message {
     font-size: 24px;
     font-weight: bold;
     padding: 15px;
-    margin-top: 20px;
     background-color: #f0f0f0;
     border-radius: 5px;
     text-align: center;
+    width: 100%;
+    max-width: 640px;
+}
+
+label[for="videoUpload"] {
+    cursor: pointer;
 }
