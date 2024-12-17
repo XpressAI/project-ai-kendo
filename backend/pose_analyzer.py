@@ -18,13 +18,23 @@ def calculate_palm_center(index, thumb, pinky):
     y = (index[1] + thumb[1] + pinky[1]) / 3
     return [x, y]
 
-def compute_angle(x1, y1, x2, y2):
+def compute_vertical_angle(x1, y1, x2, y2):
     """
-    Compute the angle of the line formed by points (x1, y1) -> (x2, y2) relative to horizontal (in degrees).
+    Compute the angle of the line formed by points (x1, y1) -> (x2, y2) relative to the vertical line going down.
+    Vertical line down is considered 0 degrees.
+    The angle returned is between 0 and 180 degrees.
     """
-    angle_rad = math.atan2(y2 - y1, x2 - x1)  # range -pi to pi
-    angle_deg = math.degrees(angle_rad)
-    return angle_deg
+    dx = x2 - x1
+    dy = y2 - y1
+    length = math.sqrt(dx*dx + dy*dy)
+    if length < 1e-6:
+        return 0.0
+    dx /= length
+    dy /= length
+    # Angle from vertical (0,1)
+    # cos(theta) = dy, so theta = arccos(dy)
+    angle = math.degrees(math.acos(dy))
+    return angle
 
 def process_frame(frame, results):
     """
@@ -51,7 +61,7 @@ def process_frame(frame, results):
                        landmarks[mp.solutions.pose.PoseLandmark.RIGHT_PINKY.value].y * height]
         right_palm_center = calculate_palm_center(right_index, right_thumb, right_pinky)
 
-        # Shoulder points to determine body orientation
+        # Shoulder points
         left_shoulder = [landmarks[mp.solutions.pose.PoseLandmark.LEFT_SHOULDER.value].x * width,
                          landmarks[mp.solutions.pose.PoseLandmark.LEFT_SHOULDER.value].y * height]
         right_shoulder = [landmarks[mp.solutions.pose.PoseLandmark.RIGHT_SHOULDER.value].x * width,
@@ -62,31 +72,33 @@ def process_frame(frame, results):
 
         # Draw pose landmarks
         mp_drawing.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
+        
+        # Draw shinai
+        draw_shinai(frame, shinai_start, shinai_end)
 
         return frame, left_palm_center, right_palm_center, left_shoulder, right_shoulder, shinai_start, shinai_end
     return frame, None, None, None, None, None, None
 
-def determine_body_orientation(left_shoulder, right_shoulder):
+def determine_body_orientation_from_arms(left_palm_center, right_palm_center):
     """
-    Determine if body is facing left or right.
-    A simple heuristic: if right_shoulder.x > left_shoulder.x, facing right; else facing left.
+    Determine if body is facing left or right based on where the arms (shinai) are pointing.
+    If the right palm center is to the right of the left palm center, facing right; else facing left.
     """
-    if right_shoulder[0] > left_shoulder[0]:
+    if right_palm_center[0] > left_palm_center[0]:
         return "facing_right"
     else:
         return "facing_left"
 
-def classify_cut(initial_shinai_angle, final_shinai_angle):
+def classify_cut(initial_angle, final_angle):
     """
     Classify cut as 'big' or 'small' based on angle difference.
     Adjust threshold as needed.
     """
-    angle_diff = abs(final_shinai_angle - initial_shinai_angle)
+    angle_diff = abs(final_angle - initial_angle)
     if angle_diff > 40:
         return "big_cut"
     else:
         return "small_cut"
-
 def process_single_video(input_path, output_path):
     """
     Process a single video to perform kendo analysis.
@@ -94,9 +106,6 @@ def process_single_video(input_path, output_path):
     Parameters:
     - input_path: path to the input video
     - output_path: directory where results will be saved (analysis json, pngs, processed video)
-
-    Returns:
-    - analysis_results: dictionary containing the analysis
     """
 
     cap = cv2.VideoCapture(input_path)
@@ -130,9 +139,9 @@ def process_single_video(input_path, output_path):
         out.write(processed_frame)
 
         if left_palm and right_palm and l_shoulder and r_shoulder and shinai_start and shinai_end:
-            body_angle = compute_angle(l_shoulder[0], l_shoulder[1], r_shoulder[0], r_shoulder[1])
-            shinai_angle = compute_angle(shinai_start[0], shinai_start[1], shinai_end[0], shinai_end[1])
-            orientation = determine_body_orientation(l_shoulder, r_shoulder)
+            body_angle = compute_vertical_angle(l_shoulder[0], l_shoulder[1], r_shoulder[0], r_shoulder[1])
+            shinai_angle = compute_vertical_angle(shinai_start[0], shinai_start[1], shinai_end[0], shinai_end[1])
+            orientation = determine_body_orientation_from_arms(left_palm, right_palm)
 
             frame_data = {
                 "frame_number": frame_count,
@@ -173,7 +182,7 @@ def process_single_video(input_path, output_path):
             "cut_classification": cut_classification
         }
 
-        # Save first and last frame images
+        # Save first and last frame images with overlay
         cap = cv2.VideoCapture(input_path)
 
         # Save first frame image
@@ -189,7 +198,9 @@ def process_single_video(input_path, output_path):
                 first_frame_data["right_palm"],
                 first_frame_data["body_angle"],
                 first_frame_data["shinai_angle"],
-                first_frame_path
+                first_frame_path,
+                draw_vertical_line=True,
+                draw_arc=True
             )
 
         # Save last frame image
@@ -205,7 +216,9 @@ def process_single_video(input_path, output_path):
                 last_frame_data["right_palm"],
                 last_frame_data["body_angle"],
                 last_frame_data["shinai_angle"],
-                final_frame_path
+                final_frame_path,
+                draw_vertical_line=True,
+                draw_arc=True
             )
 
         cap.release()
@@ -221,19 +234,12 @@ def process_single_video(input_path, output_path):
 # For now, we assume input_dir already contains the individual cut videos.
 # def detect_swings(long_video_path, temp_dir):
 #     # TODO: implement swing detection
-#     # This function should split the long video into multiple single-swing videos.
-#     # For now, we assume videos are already cut.
 #     pass
 
 def process_kendo_analysis_on_dir(input_dir, output_dir, temp_dir=None):
     """
     Process all videos in input_dir (each representing a single swing),
     perform analysis, and output results to output_dir.
-
-    Parameters:
-    - input_dir: directory containing individual swing videos
-    - output_dir: directory where results for each swing will be stored
-    - temp_dir: optional directory for temporary files; if None, a default will be used.
     """
 
     if temp_dir is None:
@@ -241,12 +247,9 @@ def process_kendo_analysis_on_dir(input_dir, output_dir, temp_dir=None):
     os.makedirs(temp_dir, exist_ok=True)
     os.makedirs(output_dir, exist_ok=True)
 
-    # Iterate over each video in input_dir
     for filename in os.listdir(input_dir):
         if filename.lower().endswith((".mp4", ".mov", ".avi", ".mkv")):
             input_path = os.path.join(input_dir, filename)
-
-            # Create output subdirectory for this video
             video_name = os.path.splitext(filename)[0]
             video_output_dir = os.path.join(output_dir, video_name)
             os.makedirs(video_output_dir, exist_ok=True)
