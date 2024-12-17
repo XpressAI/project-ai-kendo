@@ -1,0 +1,3 @@
+[submodule "EVF-SAM"]
+	path = EVF-SAM
+	url = https://github.com/hustvl/EVF-SAM
