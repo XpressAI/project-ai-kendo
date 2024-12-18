@@ -11,7 +11,6 @@ from torchvision import transforms
 from torchvision.transforms.functional import InterpolationMode
 from transformers import AutoTokenizer, BitsAndBytesConfig
 
-# Add 'evf-sam' submodule path dynamically
 FILE_DIR = os.path.dirname(os.path.abspath(__file__))
 EVF_SAM_DIR = os.path.join(FILE_DIR, "../EVF-SAM")
 if EVF_SAM_DIR not in sys.path:
@@ -32,18 +31,15 @@ def parse_args(args):
     )
     parser.add_argument("--image_size", default=224, type=int, help="image size")
     parser.add_argument("--model_max_length", default=512, type=int)
-
     parser.add_argument("--local-rank", default=0, type=int, help="node rank")
     parser.add_argument("--load_in_8bit", action="store_true", default=False)
     parser.add_argument("--load_in_4bit", action="store_true", default=False)
     parser.add_argument("--model_type", default="ori", choices=["ori", "effi", "sam2"])
-    # Changed from single image to folder input
     parser.add_argument("--input_folder", type=str, required=True, help="Folder containing input images")
     parser.add_argument("--output_folder", type=str, required=True, help="Folder to save output predictions")
     parser.add_argument("--prompt", type=str, default="zebra top left")
 
     return parser.parse_args(args)
-
 
 def sam_preprocess(
     x: np.ndarray,
@@ -51,19 +47,11 @@ def sam_preprocess(
     pixel_std=torch.Tensor([58.395, 57.12, 57.375]).view(-1, 1, 1),
     img_size=1024,
     model_type="ori") -> torch.Tensor:
-    '''
-    preprocess of Segment Anything Model, including scaling, normalization and padding.  
-    '''
-    assert img_size == 1024, \
-        "both SAM and Effi-SAM receive images of size 1024^2, don't change this setting unless you're sure that your employed model works well with another size."
-
-    # Normalize colors
     if model_type=="ori":
         x = ResizeLongestSide(img_size).apply_image(x)
         h, w = resize_shape = x.shape[:2]
         x = torch.from_numpy(x).permute(2,0,1).contiguous()
         x = (x - pixel_mean) / pixel_std
-        # Pad
         padh = img_size - h
         padw = img_size - w
         x = F.pad(x, (0, padw, 0, padh))
@@ -72,13 +60,9 @@ def sam_preprocess(
         x = F.interpolate(x.unsqueeze(0), (img_size, img_size), mode="bilinear", align_corners=False).squeeze(0)
         x = (x - pixel_mean) / pixel_std
         resize_shape = None
-
     return x, resize_shape
 
 def beit3_preprocess(x: np.ndarray, img_size=224) -> torch.Tensor:
-    '''
-    preprocess for BEIT-3 model.
-    '''
     beit_preprocess = transforms.Compose([
         transforms.ToTensor(),
         transforms.Resize((img_size, img_size), interpolation=InterpolationMode.BICUBIC, antialias=None),
@@ -101,6 +85,7 @@ def init_models(args):
 
     kwargs = {"torch_dtype": torch_dtype}
     if args.load_in_4bit:
+        from transformers import BitsAndBytesConfig
         kwargs.update(
             {
                 "torch_dtype": torch.half,
@@ -114,6 +99,7 @@ def init_models(args):
             }
         )
     elif args.load_in_8bit:
+        from transformers import BitsAndBytesConfig
         kwargs.update(
             {
                 "torch_dtype": torch.half,
@@ -146,92 +132,111 @@ def init_models(args):
 
     return tokenizer, model
 
-def main(args):
-    args = parse_args(args)
-    # use float16 for the entire notebook if requested
-    if args.precision == "fp16":
-        torch.autocast(device_type="cuda", dtype=torch.float16).__enter__()
-    elif args.precision == "bf16":
-        torch.autocast(device_type="cuda", dtype=torch.bfloat16).__enter__()
-    else:
-        # fp32 - no autocast
+def run_evf_sam2_inference(version, input_folder, output_folder, prompt, model_type="sam2", precision="fp16"):
+    """
+    Run EVF-SAM2 inference on a folder of images. This can be called from the pipeline.
+    """
+    version = os.path.abspath(version)
+
+    class Args:
         pass
+    args = Args()
+    args.version = version
+    args.vis_save_path = output_folder
+    args.precision = precision
+    args.image_size = 224
+    args.model_max_length = 512
+    args.local_rank = 0
+    args.load_in_8bit = False
+    args.load_in_4bit = False
+    args.model_type = model_type
+    args.input_folder = input_folder
+    args.output_folder = output_folder
+    args.prompt = prompt
+
+    # Run the inference
+    return _run_inference(args)
+
+def _run_inference(args):
+    # Convert --version path to absolute
+    args.version = os.path.abspath(args.version)
+
+    # Setup autocast
+    if args.precision == "fp16":
+        autocast_type = torch.float16
+    elif args.precision == "bf16":
+        autocast_type = torch.bfloat16
+    else:
+        autocast_type = None
 
     if torch.cuda.is_available() and torch.cuda.get_device_properties(0).major >= 8:
-        # turn on tfloat32 for Ampere GPUs
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
 
-    # Check input folder
     if not os.path.exists(args.input_folder):
         print("Input folder not found: {}".format(args.input_folder))
-        sys.exit(1)
+        return
 
-    # Prepare output folder
     os.makedirs(args.output_folder, exist_ok=True)
 
-    # initialize model and tokenizer
     tokenizer, model = init_models(args)
 
-    # List all images in the input folder
     valid_extensions = (".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff")
     image_files = [f for f in sorted(os.listdir(args.input_folder)) if f.lower().endswith(valid_extensions)]
-
     if len(image_files) == 0:
         print("No valid images found in the folder.")
-        sys.exit(1)
+        return
 
-    prompt = args.prompt
-    input_ids = tokenizer(prompt, return_tensors="pt")["input_ids"].to(device=model.device)
+    input_ids = tokenizer(args.prompt, return_tensors="pt")["input_ids"].to(device=model.device)
 
-    for image_name in image_files:
-        image_path = os.path.join(args.input_folder, image_name)
-        image_np = cv2.imread(image_path)
-        if image_np is None:
-            print(f"Warning: Could not read {image_path}. Skipping.")
-            continue
-        image_np = cv2.cvtColor(image_np, cv2.COLOR_BGR2RGB)
-        original_size_list = [image_np.shape[:2]]
+    with torch.autocast(device_type="cuda", dtype=autocast_type) if autocast_type else torch.no_grad():
+        for image_name in image_files:
+            image_path = os.path.join(args.input_folder, image_name)
+            image_np = cv2.imread(image_path)
+            if image_np is None:
+                print(f"Warning: Could not read {image_path}. Skipping.")
+                continue
+            image_np = cv2.cvtColor(image_np, cv2.COLOR_BGR2RGB)
+            original_size_list = [image_np.shape[:2]]
 
-        image_beit = beit3_preprocess(image_np, args.image_size).to(dtype=model.dtype, device=model.device)
-        image_sam, resize_shape = sam_preprocess(image_np, model_type=args.model_type)
-        image_sam = image_sam.to(dtype=model.dtype, device=model.device)
+            image_beit = beit3_preprocess(image_np, args.image_size).to(dtype=model.dtype, device=model.device)
+            image_sam, resize_shape = sam_preprocess(image_np, model_type=args.model_type)
+            image_sam = image_sam.to(dtype=model.dtype, device=model.device)
 
-        # infer
-        pred_mask = model.inference(
-            image_sam.unsqueeze(0),
-            image_beit.unsqueeze(0),
-            input_ids,
-            resize_list=[resize_shape],
-            original_size_list=original_size_list,
-        )
-        pred_mask = pred_mask.detach().cpu().numpy()[0]
-        pred_mask = pred_mask > 0
+            pred_mask = model.inference(
+                image_sam.unsqueeze(0),
+                image_beit.unsqueeze(0),
+                input_ids,
+                resize_list=[resize_shape],
+                original_size_list=original_size_list,
+            )
+            pred_mask = pred_mask.detach().cpu().numpy()[0]
+            pred_mask = pred_mask > 0
 
-        # save visualization
-        save_img = image_np.copy()
-        save_img[pred_mask] = (
-            image_np * 0.5
-            + pred_mask[:, :, None].astype(np.uint8) * np.array([50, 120, 220]) * 0.5
-        )[pred_mask]
-        save_img = cv2.cvtColor(save_img, cv2.COLOR_RGB2BGR)
+            save_img = image_np.copy()
+            overlay_color = np.array([50, 120, 220])
+            save_img[pred_mask] = (image_np[pred_mask] * 0.5 + overlay_color * 0.5).astype(np.uint8)
+            save_img = cv2.cvtColor(save_img, cv2.COLOR_RGB2BGR)
 
-        # Save binary mask
-        binary_mask_path = os.path.join(args.output_folder, f"{os.path.splitext(image_name)[0]}_mask.png")
-        binary_mask = (pred_mask * 255).astype(np.uint8)
-        cv2.imwrite(binary_mask_path, binary_mask)
+            # Save binary mask
+            binary_mask_path = os.path.join(args.output_folder, f"{os.path.splitext(image_name)[0]}_mask.png")
+            binary_mask = (pred_mask * 255).astype(np.uint8)
+            cv2.imwrite(binary_mask_path, binary_mask)
 
-        # Save segmented points JSON
-        coords = np.argwhere(pred_mask)
-        json_output_path = os.path.join(args.output_folder, f"{os.path.splitext(image_name)[0]}_seg_points.json")
-        with open(json_output_path, "w") as json_file:
-            json.dump(coords.tolist(), json_file)
+            # Save segmentation points
+            coords = np.argwhere(pred_mask)
+            json_output_path = os.path.join(args.output_folder, f"{os.path.splitext(image_name)[0]}_seg_points.json")
+            with open(json_output_path, "w") as json_file:
+                json.dump(coords.tolist(), json_file)
 
-        # Save visualization
-        output_path = os.path.join(args.output_folder, f"{os.path.splitext(image_name)[0]}_vis.png")
-        cv2.imwrite(output_path, save_img)
-        print(f"Processed {image_path}, saved to {output_path}, {binary_mask_path}, {json_output_path}")
+            # Save visualization
+            output_path = os.path.join(args.output_folder, f"{os.path.splitext(image_name)[0]}_vis.png")
+            cv2.imwrite(output_path, save_img)
+            print(f"Processed {image_path}, saved {output_path}, {binary_mask_path}, {json_output_path}")
 
+def main(cli_args):
+    parsed_args = parse_args(cli_args)
+    _run_inference(parsed_args)
 
 if __name__ == "__main__":
     main(sys.argv[1:])

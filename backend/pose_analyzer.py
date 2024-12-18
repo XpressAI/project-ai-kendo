@@ -5,15 +5,15 @@ import mediapipe as mp
 import math
 from frame_extractor import extract_frames
 from frame_processor import process_frames
-from video_combiner import combine_frames_into_video, create_processed_video
+from video_combiner import (combine_frames_into_video, create_processed_video, 
+                            create_masked_video, create_original_pose_video,
+                            create_original_segmented_video, create_final_combined_video)
 from utils import save_frame_with_overlay
-# from segmentation import run_segmentation_placeholder
-
+from evf_sam2_inference import run_evf_sam2_inference
 
 mp_pose = mp.solutions.pose
 pose = mp_pose.Pose()
 mp_drawing = mp.solutions.drawing_utils
-
 
 def calculate_palm_center(index, thumb, pinky):
     x = (index[0] + thumb[0] + pinky[0]) / 3
@@ -55,13 +55,13 @@ def process_single_video(input_path, output_dir, temp_dir):
     # Extract frames
     fps, width, height, frame_count = extract_frames(input_path, input_frames_dir)
 
-    # Temp dirs under output_results/video_name
+    # Temp dirs
     pose_output_dir = os.path.join(video_results_dir, "temp_pose")
     seg_output_dir = os.path.join(video_results_dir, "temp_seg")
     os.makedirs(pose_output_dir, exist_ok=True)
     os.makedirs(seg_output_dir, exist_ok=True)
 
-    # Process frames (pose estimation and segmentation placeholder)
+    # Pose estimation
     first_frame_data, last_frame_data = process_frames(
         input_frames_dir,
         pose_output_dir,
@@ -72,13 +72,42 @@ def process_single_video(input_path, output_dir, temp_dir):
         calculate_palm_center
     )
 
-    # Save combined video (side by side)
+    # Run segmentation using EVF-SAM2
+    run_evf_sam2_inference(
+        version="EVF-SAM/checkpoints/evf_sam2",
+        input_folder=input_frames_dir,
+        output_folder=seg_output_dir,
+        prompt="A shinai (竹刀) is a Japanese sword...",
+        model_type="sam2",
+        precision="fp16"
+    )
+
+    # Create videos
+    # previous combined was side by side (original | pose)
     final_video_path = os.path.join(video_results_dir, "processed.mp4")
     combine_frames_into_video(input_frames_dir, pose_output_dir, final_video_path, fps)
 
-    # Save standalone pose-only video
+    # Pose-only video
     pose_video_path = os.path.join(video_results_dir, "pose_only.mp4")
     create_processed_video(pose_output_dir, pose_video_path, fps)
+
+    # Masked-only video (original + mask overlay)
+    masked_video_path = os.path.join(video_results_dir, "masked_only.mp4")
+    create_masked_video(input_frames_dir, seg_output_dir, masked_video_path, fps)
+
+    original_pose_path = os.path.join(video_results_dir, "original_pose.mp4")
+    create_original_pose_video(input_frames_dir, pose_output_dir, original_pose_path, fps)
+
+    original_segmented_path = os.path.join(video_results_dir, "original_segmented.mp4")
+    create_original_segmented_video(input_frames_dir, seg_output_dir, original_segmented_path, fps)
+
+    # Final combined 4-quadrant video
+    # top-left: original
+    # top-right: pose
+    # bottom-left: segmentation (just the mask visualization)
+    # bottom-right: combined (original+pose+mask overlay)
+    final_combined_path = os.path.join(video_results_dir, "final_combined.mp4")
+    create_final_combined_video(input_frames_dir, pose_output_dir, seg_output_dir, final_combined_path, fps)
 
     # Perform final analysis if we have valid frame data
     if first_frame_data and last_frame_data:
