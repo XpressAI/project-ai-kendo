@@ -16,7 +16,7 @@ pip install -r backend/requirements.txt
 
 # Step 3: Download Model Checkpoints
 echo "📥 Fetching model checkpoints from Hugging Face Hub..."
-python backend/download_model.py
+python backend/download_evf_model.py
 
 echo "✅ Project setup complete!"
 echo "Run 'source venv/bin/activate' to activate the virtual environment."
