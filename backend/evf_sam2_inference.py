@@ -2,7 +2,7 @@ import argparse
 import os
 import sys
 import glob
-
+import json
 import cv2
 import numpy as np
 import torch
@@ -216,10 +216,21 @@ def main(args):
         )[pred_mask]
         save_img = cv2.cvtColor(save_img, cv2.COLOR_RGB2BGR)
 
-        # Construct output path
+        # Save binary mask
+        binary_mask_path = os.path.join(args.output_folder, f"{os.path.splitext(image_name)[0]}_mask.png")
+        binary_mask = (pred_mask * 255).astype(np.uint8)
+        cv2.imwrite(binary_mask_path, binary_mask)
+
+        # Save segmented points JSON
+        coords = np.argwhere(pred_mask)
+        json_output_path = os.path.join(args.output_folder, f"{os.path.splitext(image_name)[0]}_seg_points.json")
+        with open(json_output_path, "w") as json_file:
+            json.dump(coords.tolist(), json_file)
+
+        # Save visualization
         output_path = os.path.join(args.output_folder, f"{os.path.splitext(image_name)[0]}_vis.png")
         cv2.imwrite(output_path, save_img)
-        print(f"Processed {image_path}, saved to {output_path}")
+        print(f"Processed {image_path}, saved to {output_path}, {binary_mask_path}, {json_output_path}")
 
 
 if __name__ == "__main__":
