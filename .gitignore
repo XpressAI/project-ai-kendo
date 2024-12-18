@@ -1,3 +1,7 @@
 venv/
+input_videos/
 input_frames/
 predictions/
+temp/
+output_results/
+*.pyc
