@@ -8,8 +8,8 @@ from frame_processor import process_frames
 from video_combiner import (combine_frames_into_video, create_processed_video, 
                             create_masked_video, create_original_pose_video,
                             create_original_segmented_video, create_final_combined_video)
-from utils import (save_frame_with_overlay, fit_principal_line, 
-                    compute_angle_from_line, line_points)
+from utils import (save_frame_with_overlay_perp, fit_principal_line, 
+                    classify_cut, angle_from_vector, angle_difference)
 
 from evf_sam2_inference import run_evf_sam2_inference
 
@@ -22,29 +22,11 @@ def calculate_palm_center(index, thumb, pinky):
     y = (index[1] + thumb[1] + pinky[1]) / 3
     return [x, y]
 
-def compute_vertical_angle(x1, y1, x2, y2):
-    dx = x2 - x1
-    dy = y2 - y1
-    length = math.sqrt(dx*dx + dy*dy)
-    if length < 1e-6:
-        return 0.0
-    dx /= length
-    dy /= length
-    angle = math.degrees(math.acos(dy))
-    return angle
-
 def determine_body_orientation_from_arms(left_palm_center, right_palm_center):
     if right_palm_center[0] > left_palm_center[0]:
         return "facing_right"
     else:
         return "facing_left"
-
-def classify_cut(initial_angle, final_angle):
-    angle_diff = abs(final_angle - initial_angle)
-    if angle_diff > 40:
-        return "big_cut"
-    else:
-        return "small_cut"
 
 def process_single_video(input_path, output_dir, temp_dir):
     video_name = os.path.splitext(os.path.basename(input_path))[0]
@@ -64,6 +46,15 @@ def process_single_video(input_path, output_dir, temp_dir):
     os.makedirs(seg_output_dir, exist_ok=True)
 
     # Pose estimation
+    from mediapipe import solutions as mp
+    pose = mp.pose.Pose()
+    mp_drawing = mp.drawing_utils
+    mp_pose = mp.pose
+    def calculate_palm_center(index, thumb, pinky):
+        x = (index[0] + thumb[0] + pinky[0]) / 3
+        y = (index[1] + thumb[1] + pinky[1]) / 3
+        return [x, y]
+
     first_frame_data, last_frame_data = process_frames(
         input_frames_dir,
         pose_output_dir,
@@ -74,12 +65,12 @@ def process_single_video(input_path, output_dir, temp_dir):
         calculate_palm_center
     )
 
-    # Run segmentation using EVF-SAM2
+    # Run segmentation
     run_evf_sam2_inference(
         version="EVF-SAM/checkpoints/evf_sam2",
         input_folder=input_frames_dir,
         output_folder=seg_output_dir,
-        prompt="A shinai (竹刀) is a Japanese sword...",
+        prompt="A shinai (竹刀) is a Japanese sword typically made of bamboo used for practice and competition in kendō",
         model_type="sam2",
         precision="fp16"
     )
@@ -100,7 +91,6 @@ def process_single_video(input_path, output_dir, temp_dir):
 
     # Final analysis using principal axis of the mask
     if first_frame_data and last_frame_data:
-        # Identify the mask paths for the first and last frames
         first_mask_path = os.path.join(seg_output_dir, f"frame_{first_frame_data['frame_number']:06d}_mask.png")
         final_mask_path = os.path.join(seg_output_dir, f"frame_{last_frame_data['frame_number']:06d}_mask.png")
 
@@ -111,22 +101,35 @@ def process_single_video(input_path, output_dir, temp_dir):
             vx1, vy1, x1, y1 = first_line
             vx2, vy2, x2, y2 = final_line
 
-            initial_shinai_angle = compute_angle_from_line(vx1, vy1)
-            final_shinai_angle = compute_angle_from_line(vx2, vy2)
+            # BODY AXIS from last frame
+            body_vx = last_frame_data["body_vx"]
+            body_vy = last_frame_data["body_vy"]
+            body_angle = angle_from_vector(body_vx, body_vy)
 
-            # Compute relative angles
-            cut_classification = classify_cut(initial_shinai_angle, final_shinai_angle)
-            initial_relative_angle = initial_shinai_angle - first_frame_data["body_angle"]
-            final_relative_angle = final_shinai_angle - last_frame_data["body_angle"]
+            # Perpendicular line to body axis = body_angle + 90°
+            perpendicular_angle = body_angle + 90.0
+            if perpendicular_angle > 180:
+                perpendicular_angle -= 360
+
+            # Shinai angle from final principal line
+            shinai_angle_final = angle_from_vector(vx2, vy2)
+
+            # Relative angle of shinai to perpendicular line
+            # This will be used for classification and arc drawing
+            relative_angle_final = angle_difference(perpendicular_angle, shinai_angle_final)
+
+            # Classification:
+            # If relative_angle_final > 0 => small cut (upwards)
+            # If relative_angle_final < 0 => big cut (downwards)
+            cut_class = classify_cut(relative_angle_final)
 
             analysis_results = {
-                "initial_frame": first_frame_data["frame_number"],
                 "final_frame": last_frame_data["frame_number"],
-                "initial_shinai_angle": initial_shinai_angle,
-                "final_shinai_angle": final_shinai_angle,
-                "initial_relative_angle": initial_relative_angle,
-                "final_relative_angle": final_relative_angle,
-                "cut_classification": cut_classification
+                "body_angle": body_angle,
+                "perpendicular_angle": perpendicular_angle,
+                "final_shinai_angle": shinai_angle_final,
+                "final_relative_angle": relative_angle_final,
+                "cut_classification": cut_class
             }
 
             # Save analysis results
@@ -134,53 +137,26 @@ def process_single_video(input_path, output_dir, temp_dir):
             with open(json_path, "w") as f:
                 json.dump(analysis_results, f, indent=4)
 
-            # Function to get two points from line parameters for drawing
-            def line_points(x, y, vx, vy, length=200):
-                x1 = int(x - length * vx)
-                y1 = int(y - length * vy)
-                x2 = int(x + length * vx)
-                y2 = int(y + length * vy)
-                return (x1, y1), (x2, y2)
-
-            first_shinai_start, first_shinai_end = line_points(x1, y1, vx1, vy1)
-            last_shinai_start, last_shinai_end = line_points(x2, y2, vx2, vy2)
-
-            # Save overlay images for first and last frames
+            # Draw overlays
             cap = cv2.VideoCapture(input_path)
 
-            # First frame overlay
-            cap.set(cv2.CAP_PROP_POS_FRAMES, first_frame_data["frame_number"])
-            ret, first_frame = cap.read()
-            if ret:
-                first_frame_path = os.path.join(video_results_dir, "kamae_analysis.png")
-                save_frame_with_overlay(
-                    first_frame,
-                    first_shinai_start,
-                    first_shinai_end,
-                    first_frame_data["left_palm"],
-                    first_frame_data["right_palm"],
-                    first_frame_data["body_angle"],
-                    initial_shinai_angle,
-                    first_frame_path,
-                    draw_vertical_line=True,
-                    draw_arc=True
-                )
-
-            # Last frame overlay
+            # For the final frame overlay
             cap.set(cv2.CAP_PROP_POS_FRAMES, last_frame_data["frame_number"])
             ret, last_frame = cap.read()
             if ret:
                 final_frame_path = os.path.join(video_results_dir, "final_cut_analysis.png")
-                save_frame_with_overlay(
-                    last_frame,
-                    last_shinai_start,
-                    last_shinai_end,
-                    last_frame_data["left_palm"],
-                    last_frame_data["right_palm"],
-                    last_frame_data["body_angle"],
-                    final_shinai_angle,
-                    final_frame_path,
-                    draw_vertical_line=True,
+
+                # Draw arc from perpendicular line to shinai line
+                # baseline = perpendicular_angle
+                # current = shinai_angle_final
+                # We'll reuse `save_frame_with_overlay` but modify it to accept baseline angles
+                from utils import save_frame_with_overlay_perp
+                save_frame_with_overlay_perp(
+                    frame=last_frame,
+                    vx=vx2, vy=vy2, x=x2, y=y2,
+                    baseline_angle=perpendicular_angle,
+                    current_angle=shinai_angle_final,
+                    save_path=final_frame_path,
                     draw_arc=True
                 )
             cap.release()
@@ -197,4 +173,4 @@ def process_kendo_analysis_on_dir(input_dir, output_dir, temp_dir=None):
             print(f"Processing video: {input_path}")
             analysis_results = process_single_video(input_path, output_dir, temp_dir)
             if analysis_results is not None:
-                print(f"Analysis results saved in output directory for {filename}")
+                print(f"Analysis results saved for {filename}")
