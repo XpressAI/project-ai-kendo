@@ -1,5 +1,6 @@
 import numpy as np
 import cv2
+import math
 
 def calculate_shinai_endpoints(left_palm, right_palm):
     dx = right_palm[0] - left_palm[0]
@@ -45,3 +46,60 @@ def save_frame_with_overlay(frame, shinai_start, shinai_end, left_palm, right_pa
 
     cv2.imwrite(save_path, frame)
     return frame
+
+def fit_principal_line(mask_path):
+    """
+    Fits a principal line to the shinai segmentation mask and returns the line parameters.
+
+    Parameters:
+        mask_path (str): Path to the mask image.
+
+    Returns:
+        (vx, vy, x, y) from cv2.fitLine or None if no valid line is found.
+    """
+    mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
+    if mask is None:
+        return None
+
+    _, thresholded = cv2.threshold(mask, 127, 255, cv2.THRESH_BINARY)
+    contours, _ = cv2.findContours(thresholded, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return None
+
+    all_points = np.vstack([contour.reshape(-1, 2) for contour in contours])
+    vx, vy, x, y = cv2.fitLine(all_points, cv2.DIST_L2, 0, 0.01, 0.01)
+    return vx, vy, x, y
+
+def compute_angle_from_line(vx, vy):
+    """
+    Compute the angle relative to the vertical axis from the line direction (vx, vy).
+    Parameters:
+        vx, vy (float): Directional vectors of the line.
+    Returns:
+        float: Angle in degrees relative to the vertical axis (0° is vertical).
+    """
+    length = math.sqrt(vx * vx + vy * vy)
+    if length < 1e-6:
+        return 0.0
+    vy_norm = vy / length
+    return math.degrees(math.acos(vy_norm))
+
+
+
+def line_points(x, y, vx, vy, length=200):
+    """
+    Computes two points along the line defined by (vx, vy) direction starting from (x, y).
+
+    Parameters:
+        x, y (float): A point on the line.
+        vx, vy (float): Directional vector of the line.
+        length (int): Length of the line segment to compute.
+
+    Returns:
+        tuple: Two points as ((x1, y1), (x2, y2)).
+    """
+    x1 = int(x - length * vx)
+    y1 = int(y - length * vy)
+    x2 = int(x + length * vx)
+    y2 = int(y + length * vy)
+    return (x1, y1), (x2, y2)
