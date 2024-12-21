@@ -18,14 +18,6 @@ def compute_vertical_angle(x1, y1, x2, y2):
     angle = math.degrees(math.acos(dy))
     return angle
 
-def determine_body_orientation_from_arms(left_palm_center, right_palm_center):
-    """
-    Determine body orientation based on the relative positions of the palms.
-    """
-    if right_palm_center[0] > left_palm_center[0]:
-        return "facing_right"
-    else:
-        return "facing_left"
 
 def process_frames(input_frames_dir, pose_output_dir, seg_output_dir, pose, mp_drawing, mp_pose, calculate_palm_center):
     frame_files = sorted([f for f in os.listdir(input_frames_dir) if f.endswith(".png")])
@@ -43,9 +35,8 @@ def process_frames(input_frames_dir, pose_output_dir, seg_output_dir, pose, mp_d
 
         if results.pose_landmarks:
             landmarks = results.pose_landmarks.landmark
-
-            # Get needed landmarks
             def lm(l): return np.array([landmarks[l].x * width, landmarks[l].y * height])
+            
             nose = lm(mp_pose.PoseLandmark.NOSE.value)
             left_shoulder = lm(mp_pose.PoseLandmark.LEFT_SHOULDER.value)
             right_shoulder = lm(mp_pose.PoseLandmark.RIGHT_SHOULDER.value)
@@ -63,11 +54,9 @@ def process_frames(input_frames_dir, pose_output_dir, seg_output_dir, pose, mp_d
             right_pinky = lm(mp_pose.PoseLandmark.RIGHT_PINKY.value)
             right_palm_center = calculate_palm_center(right_index, right_thumb, right_pinky)
 
-            # Midpoints
+            # Body vertical axis (hip_mid to shoulder_mid)
             shoulder_mid = (left_shoulder + right_shoulder) / 2.0
             hip_mid = (left_hip + right_hip) / 2.0
-
-            # Body vertical axis: line from hip_mid to shoulder_mid
             body_vx = shoulder_mid[0] - hip_mid[0]
             body_vy = shoulder_mid[1] - hip_mid[1]
 
@@ -80,8 +69,10 @@ def process_frames(input_frames_dir, pose_output_dir, seg_output_dir, pose, mp_d
             shinai_start, shinai_end = calculate_shinai_endpoints(left_palm_center, right_palm_center)
             draw_shinai(blank_image, shinai_start, shinai_end)
 
-            # Determine orientation (still might be useful)
-            orientation = "facing_right" if right_palm_center[0] > left_palm_center[0] else "facing_left"
+            # Determine orientation based on shinai midpoint position relative to body midpoint
+            shinai_mid = (np.array(shinai_start) + np.array(shinai_end)) / 2.0
+
+            orientation = "facing_left" if shinai_mid[0] < hip_mid[0] else "facing_right"
 
             frame_data = {
                 "frame_number": i,
