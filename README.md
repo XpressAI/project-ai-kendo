@@ -1,99 +1,90 @@
 # Project AI Kendo
 
-This is a fun side project that combines my love for Kendo and technology. Using tools like Mediapipe and `EVF-SAM2`, it analyzes Kendo movements to create cool visualizations and insights. "AI Kendo" pays homage to both the technology driving this project (AI) and the dojo, Ai Kendo, that inspired it.
+A proof-of-concept AI system for analyzing Kendo movements, combining pose estimation and shinai tracking. Born from training at Ai Kendo Malaysia, this project aims to help practitioners analyze and improve their form.
 
-## Features
+## What It Currently Does
 
-- **Pose Estimation**: Uses Mediapipe to analyze Kendo stances and movements.
-- **Segmentation**: Applies `EVF-SAM2` to generate segmentation masks.
-- **Video Processing**: Generates multiple visualization outputs:
-  - Original vs Pose estimation.
-  - Original vs Segmentation.
-  - Masked-only video.
-  - Combined 4-quadrant video.
-- **Analysis Results**: Outputs JSON files containing frame-by-frame and overall analysis.
+- Tracks and analyzes Kendo movements from video
+- Detects shinai position and angle
+- Classifies cuts (small_cut/big_cut)
+- Generates visualization videos and analytical data
 
-## Installation
+## Tech Stack
 
-1. Clone the repository:
+- **Pose Estimation**: MediaPipe Blazepose
+- **Shinai Detection**: EVF-SAM2
+- **Backend**: FastAPI
+- **Video Processing**: OpenCV
 
+## Quick Start
+
+### Prerequisites
+
+- Ensure you have Python installed. The project has been tested on **Python 3.11**.
+- If Python 3.11 is unavailable, please use a version close to 3.10+ as certain libraries may require modern Python features. Check [Python Downloads](https://www.python.org/downloads/) for installation.
+
+### Setup Instructions
+
+1. **Clone and Navigate to the Repository**:
    ```bash
-   https://github.com/XpressAI/project-ai-kendo
+   git clone https://github.com/XpressAI/project-ai-kendo
    cd project-ai-kendo
    ```
 
-2. Run the setup script:
-
+2. **Run the Setup Script**:
+   This script will set up the required environment, install dependencies, and download the necessary model checkpoints.
    ```bash
-   ./setup.sh
+   bash setup.sh
    ```
 
-   The script will:
-   - Initialize the `evf-sam` submodule.
-   - Install Python dependencies.
-   - Download the required model checkpoints.
+3. **Place Your Videos**:
+   Add your input videos to the `input_videos/` directory.
 
-## Usage
-
-### Process Videos
-
-1. Place your Kendo videos in the `input_videos/` folder.
-2. Run the main pipeline:
-
+4. **Run the Application**:
+   Start the main processing script:
    ```bash
    python backend/main.py
    ```
 
-3. Results will be saved in the `output_results/` folder.
 
-### Run Segmentation as a Standalone Script
+## Output Examples
 
-```bash
-python backend/evf_sam2_inference.py \
-    --version EVF-SAM/checkpoints/evf_sam2 \
-    --input_folder ./input_frames \
-    --output_folder ./output_results \
-    --prompt "A shinai (竹刀) is a Japanese sword..." \
-    --model_type sam2 \
-    --precision fp16
+- Multiple visualization videos (original/pose/segmented views)
+
+![multiview](assets/multiview.gif)
+
+- Frame-by-frame breakdowns
+- Angle analysis visualizations
+
+- Analysis data in JSON format
+
+```
+{
+    "kamae_angle": 4.321947987720705,
+    "cut_angle": -38.23131546090542,
+    "cut_classification": "big_cut",
+}
 ```
 
-### Output Directory
+## To Be Added
 
-Each processed video will have its own folder under `output_results/`. The folder will contain:
-- Extracted frames.
-- Visualization videos.
-- JSON files with analytical data.
+- Automatic swing video trimmer (currently only supports 1 swing video at a time)
+- Multi-angle support (front view)
+- More detailed pose-based corrections:
+  - Arm raising during strikes
+  - Shinai pullback analysis
+  - Foot positioning checks
 
-## Outputs
+## Learn More
 
-### Generated Videos
-
-1. **`processed.mp4`**: Combined side-by-side (original | pose).
-2. **`pose_only.mp4`**: Video with only pose visualization.
-3. **`masked_only.mp4`**: Video with original frames and mask overlay.
-4. **`final_combined.mp4`**: 4-quadrant video:
-   - Top-left: Original
-   - Top-right: Pose
-   - Bottom-left: Segmented
-   - Bottom-right: Combined (original + pose + segmentation mask overlay)
-5. **`original_pose.mp4`**: Side-by-side original and pose estimation.
-6. **`original_segmented.mp4`**: Side-by-side original and segmentation visualization.
-
-### Analytical Results
-
-- **`analysis_results.json`**: Contains detailed frame-by-frame and overall analysis:
-  - `initial_frame`: First frame analyzed.
-  - `final_frame`: Last frame analyzed.
-  - `initial_shinai_angle`: Shinai angle at the start.
-  - `final_shinai_angle`: Shinai angle at the end.
-  - `cut_classification`: Classification of the cut (`big_cut` or `small_cut`).
+Check out the detailed blog post: [Whack, Track, Repeat: Creating AI for Kendo Practice](https://xpress.ai/blog/ai-kendo-45)
 
 ## Acknowledgements
 
-- **The EVF-SAM2 Team**: Big thanks to the folks behind EVF-SAM2 for their amazing work on segmentation. Their model powers this project. Check it out [here](https://github.com/hustvl/EVF-SAM).
-
+- [EVF-SAM Team](https://github.com/hustvl/EVF-SAM)
+- [MediaPipe Team](https://developers.google.com/mediapipe)
+- [Ai Kendo Malaysia](https://www.aikendo.club/)
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+MIT License
